@@ -1,11 +1,11 @@
 import asyncio
-from groq import AsyncGroq
-from config import GROQ_API_KEY, GROQ_MODEL, GROQ_MAX_TOKENS
+import httpx
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_MAX_TOKENS, REQUEST_TIMEOUT
 import logging
 
 logger = logging.getLogger(__name__)
 
-client = AsyncGroq(api_key=GROQ_API_KEY)
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 def build_analysis_prompt(game_data: dict, warnings: list) -> str:
@@ -63,18 +63,26 @@ NIVEL DE RIESGO: [BAJO / MEDIO / ALTO]
 
 
 async def analyze_game(game_data: dict, warnings: list) -> str:
-    """Envía los datos del partido a Groq y devuelve el análisis. Reintenta una vez si falla."""
+    """Envía los datos del partido a Groq via HTTP y devuelve el análisis. Reintenta una vez si falla."""
     prompt = build_analysis_prompt(game_data, warnings)
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": GROQ_MAX_TOKENS,
+        "temperature": 0.3,
+    }
 
     for attempt in range(2):
         try:
-            response = await client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=GROQ_MAX_TOKENS,
-                temperature=0.3,
-            )
-            return response.choices[0].message.content.strip()
+            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+                resp = await client.post(GROQ_API_URL, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
             logger.error(f"Groq analyze_game error (intento {attempt + 1}): {e}")
             if attempt == 0:
