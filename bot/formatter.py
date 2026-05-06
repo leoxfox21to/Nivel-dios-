@@ -1,15 +1,18 @@
-from datetime import date
+from datetime import date, datetime
+import pytz
+from config import CUBA_TZ
 
 
 def format_games_list(games: list, odds_data: list) -> str:
-    """Formatea la lista de partidos del día para mostrar al usuario."""
+    """Formatea la lista de partidos del día en HTML para Telegram."""
     from apis.odds import extract_game_odds
 
     today = date.today().strftime("%d/%m/%Y")
-    lines = [f"🏀 *PARTIDOS NBA HOY — {today}*", "━━━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"🏀 <b>PARTIDOS NBA HOY — {today}</b>", "━━━━━━━━━━━━━━━━━━━━━"]
 
     if not games:
         lines.append("No hay partidos NBA programados para hoy.")
+        lines.append("\n<i>Si hay playoffs activos, puede que el calendario aún no esté cargado.</i>")
         return "\n".join(lines)
 
     for i, game in enumerate(games, start=1):
@@ -25,16 +28,12 @@ def format_games_list(games: list, odds_data: list) -> str:
         lines.append(f"    🕐 {status} | {ou_text}")
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("Usa /basket \\[número\\] para analizar un partido")
+    lines.append("Usa /basket [número] para analizar un partido")
     return "\n".join(lines)
 
 
 def format_analysis(game_data: dict, raw_analysis: str, warnings: list) -> str:
-    """Formatea el análisis completo de un partido para mostrar en Telegram."""
-    from datetime import datetime
-    import pytz
-    from config import CUBA_TZ
-
+    """Formatea el análisis completo en HTML para Telegram."""
     home = game_data["home_team"]
     away = game_data["away_team"]
     now_cuba = datetime.now(CUBA_TZ).strftime("%I:%M %p")
@@ -51,24 +50,23 @@ def format_analysis(game_data: dict, raw_analysis: str, warnings: list) -> str:
     try:
         conf_num = int(confianza.split("/")[0].strip())
         if conf_num < 6:
-            low_confidence_warning = "\n⚠️ *Confianza baja — apuesta bajo tu propio riesgo*"
+            low_confidence_warning = "\n⚠️ <b>Confianza baja — apuesta bajo tu propio riesgo</b>"
     except Exception:
         pass
 
-    lines = [
-        f"🏀 *ANÁLISIS — {away} @ {home}*",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"📊 *PICK PRINCIPAL:* {pick_principal}",
-        f"📌 *PICK SECUNDARIA:* {pick_secundaria}",
-        f"🎯 *CONFIANZA:* {confianza}",
-        f"⚠️ *ADVERTENCIAS:*\n{warnings_text}",
-        f"📝 *RAZONAMIENTO:* {razonamiento}",
-        f"🔴 *RIESGO:* {riesgo}",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ Analizado: {now_cuba} (Cuba)",
-        low_confidence_warning,
-    ]
-    return "\n".join(line for line in lines if line is not None)
+    return (
+        f"🏀 <b>ANÁLISIS — {away} @ {home}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 <b>PICK PRINCIPAL:</b> {pick_principal}\n"
+        f"📌 <b>PICK SECUNDARIA:</b> {pick_secundaria}\n"
+        f"🎯 <b>CONFIANZA:</b> {confianza}\n"
+        f"⚠️ <b>ADVERTENCIAS:</b>\n{warnings_text}\n"
+        f"📝 <b>RAZONAMIENTO:</b> {razonamiento}\n"
+        f"🔴 <b>RIESGO:</b> {riesgo}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⏰ Analizado: {now_cuba} (Cuba)"
+        f"{low_confidence_warning}"
+    )
 
 
 def _extract_field(text: str, field: str) -> str:
