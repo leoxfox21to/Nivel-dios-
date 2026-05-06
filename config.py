@@ -7,10 +7,12 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+BALLDONTLIE_API_KEY = os.getenv("BALLDONTLIE_API_KEY", "")
 
 CUBA_TZ = pytz.timezone("America/Havana")
 
-BALLDONTLIE_BASE = "https://www.balldontlie.io/api/v1"
+# BallDontLie v2 (requiere clave gratuita en balldontlie.io)
+BALLDONTLIE_BASE = "https://api.balldontlie.io/v1"
 NBA_STATS_BASE = "https://stats.nba.com/stats"
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 
