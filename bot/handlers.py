@@ -47,8 +47,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "5. La IA analiza todo y entrega el pick en español\n\n"
         "📊 <b>Fuentes de datos:</b>\n"
         "• BallDontLie API v2 — Estadísticas y resultados\n"
-        "• stats.nba.com — Respaldo y lesiones\n"
-        "• The Odds API — Cuotas de Pinnacle\n"
+        "• The Odds API — Partidos y cuotas de Pinnacle\n"
         "• Groq AI (llama3-70b) — Análisis inteligente"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
@@ -67,12 +66,21 @@ async def cmd_basket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not args:
         await update.message.reply_text("⏳ Obteniendo partidos de hoy...")
         try:
+            # Obtener cuotas primero (fuente más confiable actualmente)
+            odds_data = await odds_api.get_nba_odds()
+
+            # Intentar BallDontLie primero
             games = await balldontlie.get_today_games()
+
+            # Si BallDontLie falla, intentar NBA Stats
             if not games:
-                logger.warning("BallDontLie sin datos, usando NBA Stats backup")
+                logger.warning("BallDontLie sin datos, probando NBA Stats backup")
                 games = await nba_stats.get_today_games_backup()
 
-            odds_data = await odds_api.get_nba_odds()
+            # Si ambos fallan pero hay odds, construir partidos desde odds
+            if not games and odds_data:
+                logger.warning("BallDontLie y NBA Stats sin datos — usando The Odds API como fuente de partidos")
+                games = balldontlie.build_games_from_odds(odds_data)
 
             _games_cache = games
             _odds_cache = odds_data
