@@ -3,6 +3,19 @@ import pytz
 from config import CUBA_TZ
 
 
+def _format_commence_time(commence: str) -> str:
+    """Convierte el commence_time ISO de The Odds API a hora Cuba legible."""
+    if not commence:
+        return "Hora N/D"
+    try:
+        utc_dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
+        utc_dt = utc_dt.replace(tzinfo=pytz.utc)
+        cuba_dt = utc_dt.astimezone(CUBA_TZ)
+        return cuba_dt.strftime("%I:%M %p")
+    except Exception:
+        return commence
+
+
 def format_games_list(games: list, odds_data: list) -> str:
     """Formatea la lista de partidos del día en HTML para Telegram."""
     from apis.odds import extract_game_odds
@@ -12,20 +25,30 @@ def format_games_list(games: list, odds_data: list) -> str:
 
     if not games:
         lines.append("No hay partidos NBA programados para hoy.")
-        lines.append("\n<i>Si hay playoffs activos, puede que el calendario aún no esté cargado.</i>")
+        lines.append("<i>Intenta más tarde o verifica tu clave ODDS_API_KEY.</i>")
         return "\n".join(lines)
+
+    from_odds = games[0].get("_from_odds", False) if games else False
+    if from_odds:
+        lines.append("<i>Fuente: The Odds API (modo playoffs)</i>")
 
     for i, game in enumerate(games, start=1):
         home = game["home_team"]["full_name"]
         away = game["visitor_team"]["full_name"]
         status = game.get("status", "")
 
+        # Si es partido sintético de odds, formatear la hora ISO
+        if game.get("_from_odds"):
+            hora = _format_commence_time(status)
+        else:
+            hora = status
+
         game_odds = extract_game_odds(odds_data, home, away)
         ou_line = game_odds["over_under_line"]
         ou_text = f"O/U: {ou_line}" if ou_line else "O/U: N/D"
 
         lines.append(f"[{i}] {away} @ {home}")
-        lines.append(f"    🕐 {status} | {ou_text}")
+        lines.append(f"    🕐 {hora} | {ou_text}")
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━")
     lines.append("Usa /basket [número] para analizar un partido")
