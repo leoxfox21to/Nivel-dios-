@@ -1,22 +1,26 @@
 import httpx
 from datetime import date, timedelta
-from config import BALLDONTLIE_BASE, REQUEST_TIMEOUT
+from config import BALLDONTLIE_BASE, BALLDONTLIE_API_KEY, REQUEST_TIMEOUT
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+def _headers() -> dict:
+    """Headers para BallDontLie v2 — requiere clave de autorización."""
+    return {"Authorization": BALLDONTLIE_API_KEY} if BALLDONTLIE_API_KEY else {}
+
+
 async def get_today_games() -> list:
-    """Obtiene los partidos de NBA de hoy desde BallDontLie."""
+    """Obtiene los partidos de NBA de hoy desde BallDontLie v2."""
     today = date.today().isoformat()
     url = f"{BALLDONTLIE_BASE}/games"
     params = {"dates[]": today, "per_page": 100}
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
-            data = resp.json()
-            return data.get("data", [])
+            return resp.json().get("data", [])
     except Exception as e:
         logger.error(f"BallDontLie get_today_games error: {e}")
         return []
@@ -24,9 +28,8 @@ async def get_today_games() -> list:
 
 async def get_team_last_10(team_id: int) -> list:
     """Obtiene los últimos 10 resultados de un equipo."""
-    results = []
     today = date.today()
-    start_date = (today - timedelta(days=60)).isoformat()
+    start_date = (today - timedelta(days=90)).isoformat()
     url = f"{BALLDONTLIE_BASE}/games"
     params = {
         "team_ids[]": team_id,
@@ -36,11 +39,12 @@ async def get_team_last_10(team_id: int) -> list:
     }
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             games = resp.json().get("data", [])
             finished = [g for g in games if g.get("status") == "Final"]
             finished_sorted = sorted(finished, key=lambda g: g["date"], reverse=True)[:10]
+            results = []
             for g in finished_sorted:
                 home_id = g["home_team"]["id"]
                 home_score = g["home_team_score"]
@@ -55,29 +59,10 @@ async def get_team_last_10(team_id: int) -> list:
         return []
 
 
-async def get_season_averages(player_ids: list) -> dict:
-    """Obtiene promedios de temporada para una lista de jugadores."""
-    if not player_ids:
-        return {}
-    url = f"{BALLDONTLIE_BASE}/season_averages"
-    params = {"season": 2024}
-    for pid in player_ids:
-        params[f"player_ids[]"] = pid
-    try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json().get("data", [])
-            return {entry["player_id"]: entry for entry in data}
-    except Exception as e:
-        logger.error(f"BallDontLie get_season_averages error: {e}")
-        return {}
-
-
 async def get_team_avg_points(team_id: int) -> dict:
-    """Calcula promedio de puntos anotados y permitidos del equipo en últimos 10 juegos."""
+    """Calcula promedio de puntos anotados y permitidos en últimos 10 juegos."""
     today = date.today()
-    start_date = (today - timedelta(days=60)).isoformat()
+    start_date = (today - timedelta(days=90)).isoformat()
     url = f"{BALLDONTLIE_BASE}/games"
     params = {
         "team_ids[]": team_id,
@@ -87,14 +72,12 @@ async def get_team_avg_points(team_id: int) -> dict:
     }
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             games = resp.json().get("data", [])
             finished = [g for g in games if g.get("status") == "Final"]
             finished_sorted = sorted(finished, key=lambda g: g["date"], reverse=True)[:10]
-
-            scored = []
-            allowed = []
+            scored, allowed = [], []
             for g in finished_sorted:
                 if g["home_team"]["id"] == team_id:
                     scored.append(g["home_team_score"])
@@ -102,7 +85,6 @@ async def get_team_avg_points(team_id: int) -> dict:
                 else:
                     scored.append(g["visitor_team_score"])
                     allowed.append(g["home_team_score"])
-
             avg_scored = round(sum(scored) / len(scored), 1) if scored else 0.0
             avg_allowed = round(sum(allowed) / len(allowed), 1) if allowed else 0.0
             return {"avg_points": avg_scored, "avg_allowed": avg_allowed}
@@ -112,16 +94,15 @@ async def get_team_avg_points(team_id: int) -> dict:
 
 
 async def is_back_to_back(team_id: int) -> bool:
-    """Determina si el equipo jugó ayer (back to back)."""
+    """Determina si el equipo jugó ayer."""
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     url = f"{BALLDONTLIE_BASE}/games"
     params = {"team_ids[]": team_id, "dates[]": yesterday}
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
-            games = resp.json().get("data", [])
-            return len(games) > 0
+            return len(resp.json().get("data", [])) > 0
     except Exception as e:
         logger.error(f"BallDontLie is_back_to_back error: {e}")
         return False
@@ -129,7 +110,6 @@ async def is_back_to_back(team_id: int) -> bool:
 
 async def get_h2h_last_5(home_team_id: int, away_team_id: int) -> list:
     """Obtiene los últimos 5 enfrentamientos directos entre dos equipos."""
-    results = []
     url = f"{BALLDONTLIE_BASE}/games"
     params = {
         "team_ids[]": [home_team_id, away_team_id],
@@ -138,7 +118,7 @@ async def get_h2h_last_5(home_team_id: int, away_team_id: int) -> list:
     }
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, headers=_headers())
             resp.raise_for_status()
             games = resp.json().get("data", [])
             h2h = [
@@ -147,9 +127,14 @@ async def get_h2h_last_5(home_team_id: int, away_team_id: int) -> list:
                 and {g["home_team"]["id"], g["visitor_team"]["id"]} == {home_team_id, away_team_id}
             ]
             h2h_sorted = sorted(h2h, key=lambda g: g["date"], reverse=True)[:5]
+            results = []
             for g in h2h_sorted:
                 total = g["home_team_score"] + g["visitor_team_score"]
-                winner = g["home_team"]["full_name"] if g["home_team_score"] > g["visitor_team_score"] else g["visitor_team"]["full_name"]
+                winner = (
+                    g["home_team"]["full_name"]
+                    if g["home_team_score"] > g["visitor_team_score"]
+                    else g["visitor_team"]["full_name"]
+                )
                 results.append({
                     "date": g["date"][:10],
                     "winner": winner,
