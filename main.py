@@ -1,9 +1,14 @@
 import logging
+import ssl
+import certifi
+import httpx
 from telegram.ext import ApplicationBuilder, CommandHandler
+from telegram.request import HTTPXRequest
 
 from config import TELEGRAM_BOT_TOKEN, CUBA_TZ
 from core.logger import setup_logging
 from bot.handlers import cmd_start, cmd_help, cmd_basket
+
 
 def main():
     """Punto de entrada principal del bot."""
@@ -16,7 +21,20 @@ def main():
 
     logger.info("Iniciando Nivel Dios Picks Bot...")
 
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    # SSL con certifi — necesario en Termux/Android para evitar errores de certificado
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        http_version="1.1",
+        httpx_kwargs={"verify": ssl_ctx},
+    )
+
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .request(request)
+        .build()
+    )
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
