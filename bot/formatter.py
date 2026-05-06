@@ -1,4 +1,5 @@
-from datetime import date, datetime
+from datetime import datetime, timezone
+from datetime import date
 import pytz
 from config import CUBA_TZ
 
@@ -8,8 +9,8 @@ def _format_commence_time(commence: str) -> str:
     if not commence:
         return "Hora N/D"
     try:
-        utc_dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
-        utc_dt = utc_dt.replace(tzinfo=pytz.utc)
+        # Funciona con Python 3.7+ — convierte Z a +00:00 antes de parsear
+        utc_dt = datetime.fromisoformat(commence.replace("Z", "+00:00"))
         cuba_dt = utc_dt.astimezone(CUBA_TZ)
         return cuba_dt.strftime("%I:%M %p")
     except Exception:
@@ -30,14 +31,13 @@ def format_games_list(games: list, odds_data: list) -> str:
 
     from_odds = games[0].get("_from_odds", False) if games else False
     if from_odds:
-        lines.append("<i>Fuente: The Odds API (modo playoffs)</i>")
+        lines.append("<i>📡 Fuente: The Odds API (modo playoffs)</i>")
 
     for i, game in enumerate(games, start=1):
         home = game["home_team"]["full_name"]
         away = game["visitor_team"]["full_name"]
         status = game.get("status", "")
 
-        # Si es partido sintético de odds, formatear la hora ISO
         if game.get("_from_odds"):
             hora = _format_commence_time(status)
         else:
