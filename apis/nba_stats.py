@@ -5,6 +5,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# stats.nba.com es lento — timeout extendido
+NBA_TIMEOUT = 20
+
 
 async def get_today_games_backup() -> list:
     """Obtiene los partidos de hoy desde stats.nba.com como respaldo."""
@@ -12,7 +15,7 @@ async def get_today_games_backup() -> list:
     url = f"{NBA_STATS_BASE}/scoreboardv2"
     params = {"GameDate": today, "LeagueID": "00"}
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, headers=NBA_STATS_HEADERS) as client:
+        async with httpx.AsyncClient(timeout=NBA_TIMEOUT, headers=NBA_STATS_HEADERS) as client:
             resp = await client.get(url, params=params)
             resp.raise_for_status()
             data = resp.json()
@@ -20,14 +23,14 @@ async def get_today_games_backup() -> list:
             games = []
             for rs in result_sets:
                 if rs.get("name") == "GameHeader":
-                    headers = rs["headers"]
+                    hdrs = rs["headers"]
                     rows = rs["rowSet"]
                     for row in rows:
-                        game = dict(zip(headers, row))
-                        games.append(game)
+                        games.append(dict(zip(hdrs, row)))
+            logger.info(f"NBA Stats backup: {len(games)} partidos encontrados")
             return games
     except Exception as e:
-        logger.error(f"NBA Stats get_today_games_backup error: {e}")
+        logger.error(f"NBA Stats get_today_games_backup error: {type(e).__name__}: {e}")
         return []
 
 
@@ -40,19 +43,17 @@ async def get_team_game_log(team_id: int) -> list:
         "SeasonType": "Regular Season",
     }
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, headers=NBA_STATS_HEADERS) as client:
+        async with httpx.AsyncClient(timeout=NBA_TIMEOUT, headers=NBA_STATS_HEADERS) as client:
             resp = await client.get(url, params=params)
             resp.raise_for_status()
             data = resp.json()
-            result_sets = data.get("resultSets", [])
-            for rs in result_sets:
+            for rs in data.get("resultSets", []):
                 if rs.get("name") == "TeamGameLog":
-                    headers = rs["headers"]
-                    rows = rs["rowSet"]
-                    return [dict(zip(headers, row)) for row in rows[:10]]
+                    hdrs = rs["headers"]
+                    return [dict(zip(hdrs, row)) for row in rs["rowSet"][:10]]
             return []
     except Exception as e:
-        logger.error(f"NBA Stats get_team_game_log error: {e}")
+        logger.error(f"NBA Stats get_team_game_log error: {type(e).__name__}: {e}")
         return []
 
 
@@ -60,16 +61,15 @@ async def get_injuries() -> list:
     """Obtiene el reporte de lesiones desde stats.nba.com."""
     url = f"{NBA_STATS_BASE}/injuries"
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, headers=NBA_STATS_HEADERS) as client:
-            resp = await client.get(url)
+        async with httpx.AsyncClient(timeout=NBA_TIMEOUT, headers=NBA_STATS_HEADERS) as client:
+            resp = await client.get(url, headers=NBA_STATS_HEADERS)
             resp.raise_for_status()
             data = resp.json()
-            result_sets = data.get("resultSets", [])
-            for rs in result_sets:
-                headers = rs.get("headers", [])
+            for rs in data.get("resultSets", []):
+                hdrs = rs.get("headers", [])
                 rows = rs.get("rowSet", [])
-                return [dict(zip(headers, row)) for row in rows]
+                return [dict(zip(hdrs, row)) for row in rows]
             return []
     except Exception as e:
-        logger.error(f"NBA Stats get_injuries error: {e}")
+        logger.error(f"NBA Stats get_injuries error: {type(e).__name__}: {e}")
         return []
