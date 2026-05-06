@@ -1,15 +1,19 @@
 def apply_filters(game_data: dict) -> dict:
     """
-    Aplica filtros estrictos al partido antes de enviarlo a Groq.
+    Aplica filtros al partido antes de enviarlo a Groq.
     Devuelve {'skip': bool, 'warnings': list}.
     """
     warnings = []
     skip = False
 
-    # Regla 1: Historial insuficiente
-    if len(game_data["home_last_10"]) < 10 or len(game_data["away_last_10"]) < 10:
-        skip = True
-        warnings.append("Datos insuficientes — menos de 10 partidos jugados")
+    # Regla 1: Historial insuficiente — solo advertencia, no bloquea
+    # (en playoffs BallDontLie no devuelve datos históricos)
+    home_games = len(game_data["home_last_10"])
+    away_games = len(game_data["away_last_10"])
+    if home_games == 0 and away_games == 0:
+        warnings.append("⚠️ Sin historial reciente — análisis basado solo en cuotas de mercado")
+    elif home_games < 10 or away_games < 10:
+        warnings.append(f"⚠️ Historial parcial ({home_games}/{away_games} partidos) — confianza reducida")
 
     # Regla 2: Estrella lesionada (20+ PPG)
     stars_out = [
@@ -27,7 +31,7 @@ def apply_filters(game_data: dict) -> dict:
     if game_data["away_is_back_to_back"]:
         warnings.append("⚠️ Visitante juega Back to Back — rendimiento reducido ~15%")
 
-    # Regla 4: Sin línea de mercado
+    # Regla 4: Sin línea de mercado — esto sí bloquea el análisis
     if not game_data["over_under_line"]:
         skip = True
         warnings.append("Sin línea de mercado disponible — no se puede analizar")
